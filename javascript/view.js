@@ -36,7 +36,7 @@
     const st = SC.statusOf(doc);
     const send = ['send', 'Send', SC.icon('share', 18)];
     const pay = ['pay', 'Payment', SC.icon('dollar', 18)];
-    if (doc.type === 'receipt') return [{ k: 'send', l: 'Share', i: SC.icon('share', 18), p: 1 }, { k: 'pdf', l: 'PDF', i: SC.icon('download', 18) }];
+    if (doc.type === 'receipt') return [{ k: 'share', l: 'Share', i: SC.icon('share', 18), p: 1 }, { k: 'pdf', l: 'PDF', i: SC.icon('download', 18) }];
     if (doc.type === 'estimate') {
       const conv = { k: 'convert', l: 'Convert to invoice', i: SC.icon('convert', 18) };
       const snd = { k: 'send', l: 'Send', i: SC.icon('share', 18) };
@@ -70,6 +70,7 @@
         `<option value="${esc(p.id)}" ${rcpt === p.id ? 'selected' : ''}>Receipt ${esc(p.receiptNumber)} · ${m(p.amount)}</option>`).join('')}</select>` : ''}
       <div class="paper-wrap" id="pw"></div>`;
     drawPaper();
+    scheduleWarm();
     let bar = $('#actionbar');
     if (!bar) { bar = document.createElement('div'); bar.id = 'actionbar'; bar.className = 'actionbar no-print'; $('.app').append(bar); }
     bar.innerHTML = `<button type="button" class="icon-btn round" data-a="back" aria-label="Back">${SC.icon('back')}</button>
@@ -93,26 +94,81 @@
   const row = (icon, label, sub, key, cls) =>
     `<button type="button" class="srow ${cls || ''}" data-r="${key}"><span class="ico-wrap">${SC.icon(icon, 20)}</span><span>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></button>`;
 
-  async function makePdf(share) {
+  /* ---------- PDF: built ahead of time so Share can fire straight from a tap ---------- */
+  let pdfCache = null; // { key, promise, file }
+  const pdfKey = () => JSON.stringify([doc, rcpt]);
+  function warmPdf() {
+    const key = pdfKey();
+    if (pdfCache && pdfCache.key === key) return pdfCache;
+    const entry = { key, file: null, promise: null };
+    entry.promise = SC.pdfBlob(paperHTML()).then((blob) => {
+      entry.file = new File([blob], SC.docFileName(doc, rcpt), { type: 'application/pdf' });
+      return entry.file;
+    });
+    entry.promise.catch(() => { if (pdfCache === entry) pdfCache = null; });
+    pdfCache = entry;
+    return entry;
+  }
+  let warmTimer = 0;
+  const scheduleWarm = () => { clearTimeout(warmTimer); warmTimer = setTimeout(() => { try { warmPdf(); } catch (e) { /* ignore */ } }, 1500); };
+
+  async function makePdf() {
     SC.toast('Preparing PDF…');
     try {
-      const blob = await SC.pdfBlob(paperHTML());
-      const name = SC.docFileName(doc, rcpt);
-      const file = new File([blob], name, { type: 'application/pdf' });
-      if (share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: subject(), text: shareMsg() });
-        markSent();
-      } else if (share && navigator.share) {
-        await navigator.share({ title: subject(), text: shareMsg() });
-        markSent();
-      } else {
-        SC.saveBlob(blob, name);
-        SC.toast('PDF saved');
-      }
-    } catch (e) {
-      if (e && e.name === 'AbortError') return;
-      SC.toast((e && e.message) || 'Could not make the PDF');
+      const file = await warmPdf().promise;
+      SC.saveBlob(file, file.name);
+      SC.toast('PDF saved');
+    } catch (e) { SC.toast((e && e.message) || 'Could not make the PDF'); }
+  }
+
+  // Share: the phone's share sheet with the PDF attached. If the browser cannot attach files,
+  // offer sharing options that do work instead of just downloading.
+  function shareFallback(file) {
+    const c = doc.customer || {};
+    const url = file ? URL.createObjectURL(file) : '';
+    const sh = SC.sheet.open({
+      title: 'Share',
+      body: `<p class="hint" style="margin-bottom:10px">This browser can't attach the PDF to other apps directly. Pick how to send it:</p><div class="list">
+        ${row('chat', 'WhatsApp', 'Message with the details', 'wa')}
+        ${row('mail', 'Email', c.email || 'Opens your email app', 'mail')}
+        ${row('copy', 'Copy message', '', 'copy')}
+        ${file ? row('download', 'Save PDF', 'Then attach it anywhere', 'save') : ''}
+        ${file ? row('docs', 'Open PDF', 'View it in a new tab', 'open') : ''}
+      </div>`
+    });
+    sh.el.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-r]');
+      if (!b) return;
+      const k = b.dataset.r, text = shareMsg();
+      if (k === 'wa') { sh.close(); window.open('https://wa.me/' + SC.waNumber(c.phone) + '?text=' + encodeURIComponent(text), '_blank'); markSent(); }
+      else if (k === 'mail') { sh.close(); location.href = 'mailto:' + encodeURIComponent(c.email || '') + '?subject=' + encodeURIComponent(subject()) + '&body=' + encodeURIComponent(text); markSent(); }
+      else if (k === 'copy') { try { await navigator.clipboard.writeText(text); SC.toast('Message copied'); } catch (err) { SC.toast('Could not copy'); } sh.close(); }
+      else if (k === 'save') { SC.saveBlob(file, file.name); SC.toast('PDF saved'); }
+      else if (k === 'open') window.open(url, '_blank');
+    });
+  }
+
+  function nativeShare(file) {
+    return navigator.share({ files: [file], title: subject(), text: shareMsg() }).then(markSent).catch((err) => {
+      if (err && err.name === 'AbortError') return;
+      shareFallback(file);
+    });
+  }
+
+  async function shareDoc() {
+    const entry = warmPdf();
+    // PDF already built: share straight away (the tap is still "fresh", which phones require).
+    if (entry.file) {
+      if (navigator.canShare && navigator.canShare({ files: [entry.file] })) return nativeShare(entry.file);
+      return shareFallback(entry.file);
     }
+    SC.toast('Preparing PDF…');
+    let file;
+    try { file = await entry.promise; } catch (e) { SC.toast((e && e.message) || 'Could not make the PDF'); return; }
+    if (!(navigator.canShare && navigator.canShare({ files: [file] }))) return shareFallback(file);
+    // built while waiting, so a new tap is needed to open the share sheet
+    const sh = SC.sheet.open({ title: 'Ready to share', body: `<p class="hint">Your PDF is ready.</p>`, footer: `<button type="button" class="btn primary" data-go>${SC.icon('share', 18)} Share PDF</button>` });
+    sh.el.querySelector('[data-go]').addEventListener('click', () => { sh.close(); nativeShare(file); });
   }
   function printIt() {
     const old = document.title;
@@ -145,12 +201,12 @@
       if (k === 'wa') { sh.close(); window.open('https://wa.me/' + SC.waNumber(c.phone) + '?text=' + encodeURIComponent(text), '_blank'); markSent(); }
       else if (k === 'mail') { sh.close(); location.href = 'mailto:' + encodeURIComponent(c.email || '') + '?subject=' + encodeURIComponent(subject()) + '&body=' + encodeURIComponent(text); markSent(); }
       else if (k === 'sms') { sh.close(); location.href = 'sms:' + (c.phone || '') + '?body=' + encodeURIComponent(text); markSent(); }
-      else if (k === 'sharepdf') { sh.close(); makePdf(true); }
+      else if (k === 'sharepdf') { sh.close(); shareDoc(); }
       else if (k === 'copy') {
         try { await navigator.clipboard.writeText(text); SC.toast('Message copied'); } catch (err) { SC.toast('Could not copy'); }
         sh.close(); markSent();
       }
-      else if (k === 'pdf') { sh.close(); makePdf(false); }
+      else if (k === 'pdf') { sh.close(); makePdf(); }
       else if (k === 'print') { sh.close(); setTimeout(printIt, 300); }
     });
   }
@@ -209,7 +265,7 @@
       else if (k === 'sent') { doc.status = 'sent'; doc.sentAt = Date.now(); SC.docs.save(doc); draw(); SC.toast('Marked as sent'); }
       else if (k === 'accept') { doc.status = 'accepted'; SC.docs.save(doc); draw(); SC.toast('Estimate accepted'); }
       else if (k === 'pay') setTimeout(openPayment, 280);
-      else if (k === 'pdf') makePdf(false);
+      else if (k === 'pdf') makePdf();
       else if (k === 'print') setTimeout(printIt, 300);
       else if (k === 'del') {
         if (await SC.confirm({ title: 'Delete this document?', text: `${SC.TYPE_LABEL[doc.type]} #${doc.number} will be permanently removed from this device.`, ok: 'Delete', danger: true })) {
@@ -254,9 +310,10 @@
     const k = b.dataset.a;
     if (k === 'back') SC.go(history.length > 1 ? -1 : '../index.html', true);
     else if (k === 'send') openSend();
+    else if (k === 'share') shareDoc();
     else if (k === 'pay') openPayment();
     else if (k === 'more') openMore();
-    else if (k === 'pdf') makePdf(false);
+    else if (k === 'pdf') makePdf();
     else if (k === 'receipt') {
       const pays = doc.payments || [];
       rcpt = pays.length ? pays[pays.length - 1].id : '';
