@@ -18,10 +18,10 @@
 
   main.innerHTML = `
     <div class="syncbar" id="sync"></div>
+    <section class="card" id="quick"></section>
     <div class="searchbox">${SC.icon('search', 18)}<input id="q" type="search" placeholder="Search products" autocomplete="off"></div>
     <div class="chips" id="cats"></div>
-    <div class="list" id="plist"></div>
-    <section class="card" id="quick"></section>`;
+    <div class="list" id="plist"></div>`;
 
   /* ---------- sync bar ---------- */
   function drawSync() {

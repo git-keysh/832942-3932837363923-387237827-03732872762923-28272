@@ -27,8 +27,8 @@
       (doc.items || [])
         .map(
           (i) => `<tr>
-            <td class="p-name">${esc(i.name) || '&nbsp;'}${i.variant ? `<span class="p-sub">${esc(i.variant)}</span>` : ''}</td>
-            <td class="r">${m(i.price)}</td><td class="c">${qtyFmt(i.qty)}</td><td class="r">${m(num(i.price) * num(i.qty))}</td></tr>`
+            <td class="p-name">${esc(i.name) || '&nbsp;'}${i.variant ? `<span class="p-sub">${esc(i.variant)}</span>` : ''}${SC.lineDiscount(i) > 0 ? `<span class="p-sub">Discount ${i.disc.type === 'percent' ? num(i.disc.value) + '%' : ''} −${m(SC.lineDiscount(i))}</span>` : ''}</td>
+            <td class="r">${m(i.price)}</td><td class="c">${qtyFmt(i.qty)}</td><td class="r">${m(SC.lineTotal(i))}</td></tr>`
         )
         .join('') || '<tr><td colspan="4" class="p-empty">No items added</td></tr>';
 
@@ -95,7 +95,7 @@
     const part = r.balance > 0;
     const cust = r.customer || {};
     const rows = r.items
-      .map((i) => `<tr><td>${esc(i.name)}${i.variant ? ` <span class="r-var">· ${esc(i.variant)}</span>` : ''}</td><td class="r">${m(num(i.price) * num(i.qty))}</td></tr>`)
+      .map((i) => `<tr><td>${esc(i.name)}${i.variant ? ` <span class="r-var">· ${esc(i.variant)}</span>` : ''}</td><td class="r">${m(SC.lineTotal(i))}</td></tr>`)
       .join('');
     const extra = [];
     if (c.discount > 0) extra.push(['Discount', '-' + m(c.discount)]);

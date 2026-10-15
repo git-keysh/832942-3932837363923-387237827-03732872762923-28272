@@ -58,6 +58,8 @@
     drawAll();
   });
 
+  let numEdited = false;
+
   /* ---------- details ---------- */
   function drawDetails() {
     const isRc = doc.type === 'receipt';
@@ -74,7 +76,7 @@
         <div class="chips" id="d-presets">${days.map(([n, l]) => `<button type="button" class="chip" data-days="${n}">${l}</button>`).join('')}</div></div>`}`;
   }
   main.addEventListener('input', (e) => {
-    if (e.target.id === 'd-num') doc.number = e.target.value;
+    if (e.target.id === 'd-num') { doc.number = e.target.value; numEdited = true; }
     if (e.target.id === 'd-issue') doc.issueDate = e.target.value;
     if (e.target.id === 'd-due') doc.dueDate = e.target.value;
   });
@@ -130,39 +132,67 @@
   /* ---------- items ---------- */
   function lineHTML(it, i) {
     return `<div class="line" data-i="${i}">
-      <div class="line-top"><input class="l-name" value="${esc(it.name)}" placeholder="Item name" autocomplete="off">
+      <div class="line-top">${doc.items.length > 1 ? `<span class="grip" data-grip aria-label="Drag to reorder">${SC.icon('grip', 20)}</span>` : ''}<input class="l-name" value="${esc(it.name)}" placeholder="Item name" autocomplete="off">
         <button type="button" class="icon-btn sm danger" data-del aria-label="Remove item">${SC.icon('trash', 16)}</button></div>
       ${it.variant ? `<span class="line-var">${esc(it.variant)}</span>` : ''}
       <div class="line-row">
         <div class="mini"><span>Price (${esc(s.currencySymbol)})</span><input class="l-price" inputmode="decimal" value="${esc(it.price)}"></div>
         <div class="mini"><span>Qty</span><div class="stepper"><button type="button" data-dec aria-label="Less">−</button><input class="l-qty" inputmode="decimal" value="${esc(it.qty)}"><button type="button" data-inc aria-label="More">+</button></div></div>
-        <div class="mini r"><span>Amount</span><strong class="l-amt">${m(num(it.price) * num(it.qty))}</strong></div>
-      </div></div>`;
-  }
-  let invCat = '';
-  function inlineCatalog() {
-    const products = SC.getCachedProducts().list;
-    const quick = SC.items.all();
-    if (!products.length && !quick.length) return `<div class="empty-mini">No items yet. Add a custom item.</div>`;
-    const cats = Array.from(new Set(products.map((p) => p.category)));
-    if (!invCat || !cats.includes(invCat)) invCat = cats[0] || '';
-    const list = products.filter((p) => p.category === invCat);
-    return `<div class="cat-block"><div class="hint" style="margin-bottom:8px">Tap a product to add it</div>
-      ${quick.length ? `<div class="chips" id="inl-quick">${quick.map((i) => `<button type="button" class="chip" data-qid="${esc(i.id)}">+ ${esc(i.name)}</button>`).join('')}</div>` : ''}
-      <div class="chips" id="inl-cats">${cats.map((c) => `<button type="button" class="chip ${c === invCat ? 'on' : ''}" data-icat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-      <div class="tiles">${list.map((p) => `<button type="button" class="tile" data-ipid="${esc(p.id)}">
-        <span class="tile-img" style="background-image:url('${esc(p.image)}')"></span>
-        <span class="tile-name">${esc(p.name || p.fullName)}</span>
-        <span class="tile-price">${p.price ? m(p.price) : '—'}</span>${SC.stockTag(p)}</button>`).join('')}</div></div>`;
+        <div class="mini r"><span>Amount</span><strong class="l-amt">${m(SC.lineTotal(it))}</strong></div>
+      </div>
+      <div class="line-disc"><span>Discount</span>
+        <div class="seg mini" data-dseg><button type="button" data-dt="amount" class="${(it.disc || {}).type !== 'percent' ? 'on' : ''}">${esc(s.currencySymbol)}</button><button type="button" data-dt="percent" class="${(it.disc || {}).type === 'percent' ? 'on' : ''}">%</button></div>
+        <input class="l-disc" inputmode="decimal" placeholder="0" value="${num((it.disc || {}).value) || ''}"></div></div>`;
   }
   function drawItems() {
     $('#sec-items').innerHTML = `<div class="row-between" style="margin-bottom:12px"><div class="card-title" style="margin:0">Items</div>
         <span class="hint">${doc.items.length} ${doc.items.length === 1 ? 'line' : 'lines'}</span></div>
-      <div id="lines">${doc.items.map(lineHTML).join('')}</div>
-      ${doc.items.length ? '' : inlineCatalog()}
+      <div id="lines">${doc.items.length ? doc.items.map(lineHTML).join('') : `<div class="empty-mini">No items yet. Add products from your store or a custom item.</div>`}</div>
       <div class="btn-row"><button type="button" class="btn" id="add-prod">${SC.icon('box', 18)} Products</button>
         <button type="button" class="btn" id="add-custom">${SC.icon('plus', 18)} Custom item</button></div>`;
   }
+  /* drag a line by its handle to reorder (touch or mouse) */
+  (function () {
+    let el = null, startY = 0, startTop = 0;
+    const box = () => $('#lines');
+    document.addEventListener('pointerdown', (e) => {
+      const g = e.target.closest('[data-grip]');
+      if (!g || !box().contains(g)) return;
+      e.preventDefault();
+      el = g.closest('.line');
+      startY = e.clientY;
+      el.classList.add('dragging');
+      g.setPointerCapture(e.pointerId);
+      if (navigator.vibrate) navigator.vibrate(10);
+    });
+    document.addEventListener('pointermove', (e) => {
+      if (!el) return;
+      if (e.clientY < 110) window.scrollBy(0, -12); else if (e.clientY > innerHeight - 160) window.scrollBy(0, 12);
+      el.style.transform = `translateY(${e.clientY - startY}px) scale(1.02)`;
+      const r = el.getBoundingClientRect(), cy = r.top + r.height / 2;
+      const prev = el.previousElementSibling, next = el.nextElementSibling;
+      const swap = (ref, before) => {
+        const t0 = el.offsetTop;
+        box().insertBefore(el, before ? ref : ref.nextSibling);
+        startY -= t0 - el.offsetTop;
+        el.style.transform = `translateY(${e.clientY - startY}px) scale(1.02)`;
+        if (navigator.vibrate) navigator.vibrate(5);
+      };
+      if (prev && prev.classList.contains('line')) { const pr = prev.getBoundingClientRect(); if (cy < pr.top + pr.height / 2) return swap(prev, true); }
+      if (next && next.classList.contains('line')) { const nr = next.getBoundingClientRect(); if (cy > nr.top + nr.height / 2) return swap(next, false); }
+    });
+    const end = () => {
+      if (!el) return;
+      const order = Array.from(box().querySelectorAll('.line')).map((l) => +l.dataset.i);
+      el = null;
+      doc.items = order.map((i) => doc.items[i]);
+      drawItems();
+      drawTotals();
+    };
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+  })();
+
   function addLine(item) {
     const hit = item.pid && doc.items.find((x) => x.pid === item.pid && (x.variant || '') === (item.variant || ''));
     if (hit) hit.qty = num(hit.qty) + num(item.qty || 1);
@@ -178,7 +208,8 @@
     if (e.target.classList.contains('l-name')) it.name = e.target.value;
     if (e.target.classList.contains('l-price')) it.price = num(e.target.value);
     if (e.target.classList.contains('l-qty')) it.qty = num(e.target.value);
-    $('.l-amt', ln).textContent = m(num(it.price) * num(it.qty));
+    if (e.target.classList.contains('l-disc')) it.disc = Object.assign({ type: 'amount' }, it.disc, { value: num(e.target.value) });
+    $('.l-amt', ln).textContent = m(SC.lineTotal(it));
     drawTotals();
   });
   lines().addEventListener('click', (e) => {
@@ -191,19 +222,16 @@
       if (step) {
         it.qty = step.hasAttribute('data-inc') ? num(it.qty) + 1 : Math.max(1, num(it.qty) - 1);
         $('.l-qty', ln).value = it.qty;
-        $('.l-amt', ln).textContent = m(num(it.price) * num(it.qty));
+        $('.l-amt', ln).textContent = m(SC.lineTotal(it));
         drawTotals();
       }
-      return;
-    }
-    let el;
-    if ((el = e.target.closest('[data-icat]'))) { invCat = el.dataset.icat; drawItems(); return; }
-    if ((el = e.target.closest('[data-qid]'))) { const it = SC.items.get(el.dataset.qid); if (it) addLine({ name: it.name, price: it.price, qty: 1 }); return; }
-    if ((el = e.target.closest('[data-ipid]'))) {
-      const p = SC.getCachedProducts().list.find((x) => x.id === el.dataset.ipid);
-      if (!p) return;
-      if (p.colors.length > 1 || p.sizes.length > 1) openPicker(p);
-      else { addLine({ name: p.fullName, price: p.price, qty: 1, pid: p.id, variant: [p.colors[0], p.sizes[0]].filter(Boolean).join(' · ') }); SC.toast('Added ' + p.name); }
+      const dt = e.target.closest('[data-dt]');
+      if (dt) {
+        it.disc = Object.assign({ value: 0 }, it.disc, { type: dt.dataset.dt });
+        ln.querySelectorAll('[data-dt]').forEach((b) => b.classList.toggle('on', b === dt));
+        $('.l-amt', ln).textContent = m(SC.lineTotal(it));
+        drawTotals();
+      }
       return;
     }
     if (e.target.closest('#add-prod')) openPicker();
@@ -412,7 +440,10 @@
     s.paymentDetails = doc.paymentDetails || '';
     SC.saveSettings(s);
     doc.number = String(doc.number || '').trim() || SC.suggestNumber(doc.type, s);
-    if (SC.docs.all().some((d) => d.id !== doc.id && d.type === doc.type && d.number === doc.number)) {
+    const used = () => SC.docs.all().some((d) => d.id !== doc.id && d.type === doc.type && d.number === doc.number);
+    // an automatic number that was taken meanwhile just moves up to the next free one
+    if (!numEdited && !isEdit) { for (let k = 0; k < 500 && used(); k++) doc.number = SC.suggestNumber(doc.type, Object.assign({}, s, { [{ invoice: 'nextInvoice', estimate: 'nextEstimate', receipt: 'nextReceipt' }[doc.type]]: (parseInt(/(\d+)\s*$/.exec(doc.number)[1], 10) || 0) + 1 })); }
+    if (used()) {
       SC.toast(`${KIND()} number ${doc.number} is already used`);
       $('#d-num').focus();
       return;
@@ -428,7 +459,7 @@
 
   title();
   drawAll();
-  SC.refreshProducts().then((r) => { if (r.ok && !doc.items.length) drawItems(); });
+  SC.refreshProducts();
 
   // Deep links: ?customer=<id> (from Customers) and ?product=<id> (from Products).
   const cid = qs.get('customer');

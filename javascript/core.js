@@ -212,9 +212,19 @@
     };
   };
 
+  // Amount taken off one line (its own discount), and the line total after it.
+  SC.lineDiscount = (i) => {
+    const gross = SC.num(i.price) * SC.num(i.qty);
+    const d = i.disc || {};
+    const v = SC.num(d.value);
+    const off = d.type === 'percent' ? (gross * v) / 100 : v;
+    return SC.round2(Math.min(Math.max(off, 0), Math.max(gross, 0)));
+  };
+  SC.lineTotal = (i) => SC.round2(SC.num(i.price) * SC.num(i.qty) - SC.lineDiscount(i));
+
   SC.calc = (doc) => {
     const items = doc.items || [];
-    const subtotal = SC.round2(items.reduce((sum, i) => sum + SC.num(i.price) * SC.num(i.qty), 0));
+    const subtotal = SC.round2(items.reduce((sum, i) => sum + SC.lineTotal(i), 0));
     const d = doc.discount || { type: 'amount', value: 0 };
     let discount = d.type === 'percent' ? (subtotal * SC.num(d.value)) / 100 : SC.num(d.value);
     discount = SC.round2(Math.min(Math.max(discount, 0), subtotal));
@@ -351,7 +361,7 @@
     }
     const c = SC.calc(doc);
     const kind = doc.type === 'estimate' ? 'estimate' : 'invoice';
-    const lines = (doc.items || []).map((i) => `• ${i.name}${i.variant ? ' (' + i.variant + ')' : ''} ×${i.qty} — ${m(SC.num(i.price) * SC.num(i.qty))}`);
+    const lines = (doc.items || []).map((i) => `• ${i.name}${i.variant ? ' (' + i.variant + ')' : ''} ×${i.qty} — ${m(SC.lineTotal(i))}`);
     let t = `${hi}Here is ${kind} #${doc.number} from ${s.businessName}.\n\n${lines.join('\n')}\n\nTotal: ${m(c.total)}`;
     if (kind === 'invoice' && c.paid > 0) t += `\nBalance due: ${m(c.balance)}`;
     if (doc.deposit > 0 && c.paid === 0) t += `\nDeposit required: ${m(doc.deposit)}`;

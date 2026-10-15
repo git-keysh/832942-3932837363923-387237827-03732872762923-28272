@@ -532,3 +532,15 @@ input, select, textarea { border-radius: 16px; background: var(--fill); }
 .pad { grid-template-columns: minmax(0, 1fr); }
 .cat-block, .chips { min-width: 0; }
 html, body { overflow-x: clip; }
+
+/* reorder + line discount */
+.grip { display: grid; place-items: center; width: 30px; height: 44px; margin-left: -6px; color: var(--faint); touch-action: none; cursor: grab; flex: none; }
+.line { transition: transform .25s var(--spring), box-shadow .25s, opacity .2s; }
+.line.dragging { position: relative; z-index: 5; box-shadow: var(--float); transition: box-shadow .2s; opacity: .97; cursor: grabbing; }
+.line-disc { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.line-disc > span { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; flex: none; }
+.line-disc .seg.mini { flex: none; }
+.line-disc .seg.mini button { padding: 0 14px; min-height: 40px; }
+.line-disc input { min-width: 0; min-height: 44px; }
+.seg.mini { display: flex; gap: 2px; }
+.seg.mini button { flex: 1 1 auto; }
