@@ -48,7 +48,7 @@
   SC.monthKey = (iso) => String(iso || '').slice(0, 7);
 
   /* ---------- storage ---------- */
-  const K = { docs: 'sc.docs', customers: 'sc.customers', settings: 'sc.settings', items: 'sc.items', products: 'sc.products' };
+  const K = { docs: 'sc.docs', customers: 'sc.customers', settings: 'sc.settings', items: 'sc.items', products: 'sc.products', reminders: 'sc.reminders' };
   const mem = {}; // used only if localStorage is blocked
   function read(key, fallback) {
     try {
@@ -95,7 +95,9 @@
     paymentDetails: '',
     invoiceTerms: '',
     thanksLine: 'Thank you for your business!',
-    theme: 'auto'
+    theme: 'auto',
+    remindWindow: 15,
+    notifOn: false
   };
   SC.getSettings = () => Object.assign({}, SC.DEFAULT_SETTINGS, read(K.settings, {}));
   SC.saveSettings = (s) => write(K.settings, s);
@@ -416,13 +418,14 @@
   /* ---------- backup ---------- */
   SC.exportAll = () => ({
     app: 'sc-invoices', version: 1, exportedAt: new Date().toISOString(),
-    docs: SC.docs.all(), customers: SC.customers.all(), items: SC.items.all(), settings: SC.getSettings()
+    docs: SC.docs.all(), customers: SC.customers.all(), items: SC.items.all(), settings: SC.getSettings(), reminders: SC.reminders ? SC.reminders.all() : []
   });
   SC.importAll = (obj) => {
     if (!obj || obj.app !== 'sc-invoices') throw new Error('This is not a Simplicity backup file');
     if (Array.isArray(obj.docs)) write(K.docs, obj.docs);
     if (Array.isArray(obj.customers)) write(K.customers, obj.customers);
     if (Array.isArray(obj.items)) write(K.items, obj.items);
+    if (Array.isArray(obj.reminders)) write('sc.reminders', obj.reminders);
     if (obj.settings && typeof obj.settings === 'object') write(K.settings, obj.settings);
   };
   SC.resetAll = () => {

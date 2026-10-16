@@ -121,61 +121,64 @@
     } catch (e) { SC.toast((e && e.message) || 'Could not make the PDF'); }
   }
 
-  // Share: the phone's share sheet with the PDF attached. If the browser cannot attach files,
-  // offer sharing options that do work instead of just downloading.
-  function shareFallback(file) {
+  /* ---------- Share: works inside an app's web view, not just in a browser ---------- */
+  let linkCache = null;
+  async function shareLink(extra) {
+    if (!linkCache || linkCache.key !== pdfKey()) linkCache = { key: pdfKey(), url: await SC.link.make(doc, s, rcpt || '', extra) };
+    return linkCache.url;
+  }
+  async function shareDoc() {
     const c = doc.customer || {};
-    const url = file ? URL.createObjectURL(file) : '';
+    const entry = warmPdf();
+    let file = entry.file;
+    if (SC.native.canSharePdf()) {
+      if (!file) { SC.toast('Preparing PDF…'); try { file = await entry.promise; } catch (e) { SC.toast('Could not make the PDF'); return; } }
+      try { await SC.native.sharePdf(file, file.name, shareMsg()); markSent(); return; } catch (e) { /* fall through to the sheet */ }
+    }
+    if (!SC.isWebView() && file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: subject(), text: shareMsg() }); markSent(); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+    }
+    let url = '';
+    try { url = await shareLink(); } catch (e) { /* no link */ }
+    SC.openShareSheet({ title: 'Share', text: shareMsg(), url, phone: c.phone, email: c.email, subject: subject(), file, onSent: markSent });
+  }
+
+  // Print: the print dialog where the app allows it; otherwise a clear way to print from the phone's browser.
+  async function printIt() {
+    const name = SC.docFileName(doc, rcpt).replace(/\.pdf$/, '');
+    if (SC.native.canPrint()) { try { SC.native.printPage(name); return; } catch (e) { /* fall through */ } }
+    const old = document.title;
+    let fired = false;
+    const mark = () => { fired = true; };
+    window.addEventListener('beforeprint', mark);
+    document.title = name;
+    document.documentElement.style.setProperty('--fit', String(SC.printFit()));
+    try { window.print(); } catch (e) { /* blocked */ }
+    setTimeout(() => {
+      window.removeEventListener('beforeprint', mark);
+      document.title = old; document.documentElement.style.removeProperty('--fit');
+      if (!fired && SC.isWebView()) printFallback();
+    }, 1400);
+  }
+  async function printFallback() {
+    const c = doc.customer || {};
+    let url = '';
+    try { url = await shareLink(); } catch (e) { /* ignore */ }
     const sh = SC.sheet.open({
-      title: 'Share',
-      body: `<p class="hint" style="margin-bottom:10px">This browser can't attach the PDF to other apps directly. Pick how to send it:</p><div class="list">
-        ${row('chat', 'WhatsApp', 'Message with the details', 'wa')}
-        ${row('mail', 'Email', c.email || 'Opens your email app', 'mail')}
-        ${row('copy', 'Copy message', '', 'copy')}
-        ${file ? row('download', 'Save PDF', 'Then attach it anywhere', 'save') : ''}
-        ${file ? row('docs', 'Open PDF', 'View it in a new tab', 'open') : ''}
-      </div>`
+      title: 'Print',
+      body: `<p class="hint" style="margin-bottom:10px">Printing isn't available inside this app. Open the document in your phone's browser and the print screen will appear there.</p><div class="list">
+        ${url ? row('print', 'Open in browser to print', 'Print screen opens automatically', 'obr') : ''}
+        ${row('download', 'Save PDF', 'Print it from any other app', 'pdf')}
+        ${url ? row('share', 'Share link', 'Send it to a printer or another phone', 'lnk') : ''}</div>`
     });
-    sh.el.addEventListener('click', async (e) => {
+    sh.el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-r]');
       if (!b) return;
-      const k = b.dataset.r, text = shareMsg();
-      if (k === 'wa') { sh.close(); window.open('https://wa.me/' + SC.waNumber(c.phone) + '?text=' + encodeURIComponent(text), '_blank'); markSent(); }
-      else if (k === 'mail') { sh.close(); location.href = 'mailto:' + encodeURIComponent(c.email || '') + '?subject=' + encodeURIComponent(subject()) + '&body=' + encodeURIComponent(text); markSent(); }
-      else if (k === 'copy') { try { await navigator.clipboard.writeText(text); SC.toast('Message copied'); } catch (err) { SC.toast('Could not copy'); } sh.close(); }
-      else if (k === 'save') { SC.saveBlob(file, file.name); SC.toast('PDF saved'); }
-      else if (k === 'open') window.open(url, '_blank');
+      sh.close();
+      if (b.dataset.r === 'obr') SC.openExternal(url + (url.includes('?') ? '&' : '?') + 'print=1');
+      else if (b.dataset.r === 'pdf') makePdf();
+      else SC.openShareSheet({ title: 'Share link', text: shareMsg(), url, phone: c.phone, email: c.email, subject: subject(), onSent: markSent });
     });
-  }
-
-  function nativeShare(file) {
-    return navigator.share({ files: [file], title: subject(), text: shareMsg() }).then(markSent).catch((err) => {
-      if (err && err.name === 'AbortError') return;
-      shareFallback(file);
-    });
-  }
-
-  async function shareDoc() {
-    const entry = warmPdf();
-    // PDF already built: share straight away (the tap is still "fresh", which phones require).
-    if (entry.file) {
-      if (navigator.canShare && navigator.canShare({ files: [entry.file] })) return nativeShare(entry.file);
-      return shareFallback(entry.file);
-    }
-    SC.toast('Preparing PDF…');
-    let file;
-    try { file = await entry.promise; } catch (e) { SC.toast((e && e.message) || 'Could not make the PDF'); return; }
-    if (!(navigator.canShare && navigator.canShare({ files: [file] }))) return shareFallback(file);
-    // built while waiting, so a new tap is needed to open the share sheet
-    const sh = SC.sheet.open({ title: 'Ready to share', body: `<p class="hint">Your PDF is ready.</p>`, footer: `<button type="button" class="btn primary" data-go>${SC.icon('share', 18)} Share PDF</button>` });
-    sh.el.querySelector('[data-go]').addEventListener('click', () => { sh.close(); nativeShare(file); });
-  }
-  function printIt() {
-    const old = document.title;
-    document.title = SC.docFileName(doc, rcpt).replace(/\.pdf$/, '');
-    document.documentElement.style.setProperty('--fit', String(SC.printFit()));
-    window.print();
-    setTimeout(() => { document.title = old; document.documentElement.style.removeProperty('--fit'); }, 800);
   }
 
   /* ---------- send ---------- */

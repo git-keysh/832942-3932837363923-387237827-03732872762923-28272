@@ -544,3 +544,55 @@ html, body { overflow-x: clip; }
 .line-disc input { min-width: 0; min-height: 44px; }
 .seg.mini { display: flex; gap: 2px; }
 .seg.mini button { flex: 1 1 auto; }
+
+/* ---------- Reminders & notifications ---------- */
+.view-stack[hidden] { display: none; }
+.view-stack { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); animation: rise .35s var(--ease) both; }
+.tab-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-style: normal; font-weight: 700; vertical-align: 1px; }
+.nav-item { position: relative; }
+.nav-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg); animation: pop .35s var(--ease); }
+
+.notif-card { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 20px; background: var(--card); box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.06)); }
+.notif-card > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.notif-card strong { font-size: 16px; }
+.notif-card span:not(.nc-ico) { font-size: 13px; color: var(--muted); }
+.nc-ico { width: 44px; height: 44px; border-radius: 15px; display: grid; place-items: center; flex: none; background: var(--brand-soft); color: var(--brand); }
+.notif-card.on .nc-ico { background: var(--ok-soft); color: var(--ok); }
+.notif-card.off .nc-ico { background: var(--gray-soft); color: var(--muted); }
+
+.cal-card { padding: 12px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cal-title { border: 0; background: transparent; font-size: 17px; font-weight: 700; color: var(--ink); padding: 8px 10px; border-radius: 12px; }
+.cal-title:active { background: var(--fill); }
+.cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cal-week span { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 0; }
+.cal-day.sel, .cal-card .cal-day.edge { background: var(--brand); color: #fff; border-radius: 14px; }
+.cal-card .cal-day { height: 48px; border-radius: 14px; }
+.cal.mini .cal-day { height: 38px; font-size: 15px; border-radius: 12px; }
+.cal.mini .cal-day.edge { border-radius: 12px; box-shadow: none; }
+.cal-day.out { opacity: .35; }
+.dots { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 3px; pointer-events: none; font-style: normal; }
+.dots b { width: 5px; height: 5px; border-radius: 50%; background: var(--brand); }
+.dots b.payment { background: var(--bad); }
+.dots b.install { background: var(--info); }
+.dots b.custom { background: var(--warn); }
+.cal-day.edge .dots b { background: #fff; }
+.cal-legend { display: flex; gap: 14px; justify-content: center; padding-top: 8px; font-size: 12px; color: var(--muted); }
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.cal-legend b { width: 8px; height: 8px; border-radius: 50%; }
+.cal-legend b.payment { background: var(--bad); } .cal-legend b.install { background: var(--info); } .cal-legend b.custom { background: var(--warn); }
+.agenda-head { margin: 4px 2px 8px; }
+
+.due-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--card); border-radius: 18px; cursor: pointer; transition: transform .2s var(--spring), background-color .15s; }
+.due-row:active { transform: scale(.985); }
+.due-when { font-size: 13px; font-weight: 600; color: var(--muted); }
+.due-row.soon .due-when { color: var(--warn); }
+.due-row.late .due-when { color: var(--bad); }
+.empty-mini { padding: 18px; text-align: center; color: var(--muted); font-size: 14px; }
+
+.popup-hero { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 8px 0 4px; }
+.popup-hero strong { font-size: 32px; letter-spacing: -.02em; }
+.popup-hero .nc-ico { width: 56px; height: 56px; border-radius: 20px; background: var(--warn-soft); color: var(--warn); animation: bell 1.2s var(--ease) .3s both; }
+.popup-hero.late .nc-ico { background: var(--bad-soft); color: var(--bad); }
+@keyframes bell { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(14deg); } 40% { transform: rotate(-12deg); } 60% { transform: rotate(8deg); } 80% { transform: rotate(-4deg); } }
+.pad.tight { padding-bottom: 120px; }

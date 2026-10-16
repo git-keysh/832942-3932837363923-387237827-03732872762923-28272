@@ -30,6 +30,7 @@
     convert: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
     calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
     grip: '<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>',
+    bell: '<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/><path d="M10 21h4"/>',
     dollar: '<path d="M12 3v18M16 7.5c-.8-1.3-2.2-2-4-2-2.4 0-4 1.2-4 3s1.6 2.6 4 3 4 1.2 4 3-1.6 3-4 3c-1.9 0-3.4-.8-4.2-2.2"/>'
   };
   SC.icon = (name, size) => {
@@ -199,6 +200,7 @@
     });
     // light haptic tick on taps (Android; ignored elsewhere)
     document.addEventListener('pointerdown', (e) => { if (e.target.closest('.btn, .chip, .nav-item, .nav-new, .icon-btn, .seg button') && navigator.vibrate) navigator.vibrate(6); }, { passive: true });
+    if (SC.notif) SC.notif.boot(page);
     window.addEventListener('pageshow', () => app.classList.remove('leaving', 'leaving-back'));
 
     // swipe from the left edge to go back

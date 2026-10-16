@@ -59,6 +59,11 @@
         ${text('thanksLine', 'Thank-you line')}
       </section>
 
+      <section class="card"><div class="card-title">Reminders</div>
+        ${numf('remindWindow', 'Pop-up reminder window (days before due)')}
+        <p class="hint" style="margin-top:8px">When something is due within this many days, a reminder pops up when you open the app. Manage dates in Customers → Reminders.</p>
+      </section>
+
       <section class="card"><div class="card-title">Backup</div>
         <p class="hint" style="margin-bottom:12px">Your documents live on this device. Save a backup file now and then, especially before clearing browser data.</p>
         <div class="btn-row"><button type="button" class="btn" id="bk-export">${SC.icon('download', 18)} Export</button>
